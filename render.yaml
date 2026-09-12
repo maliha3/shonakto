@@ -6,6 +6,12 @@ services:
     buildCommand: "pip install -r requirements.txt && pip install face_recognition==1.3.0 --no-deps && python manage.py collectstatic --noinput && python manage.py migrate"
     startCommand: "gunicorn config.wsgi:application"
     envVars:
+      # Pin to a version with mature prebuilt wheels for our pinned deps
+      # (numpy/Pillow/psycopg2/dlib-bin) — Render's default is much newer
+      # and forced several packages to compile from source, exhausting
+      # the build's memory.
+      - key: PYTHON_VERSION
+        value: "3.11.16"
       - key: SECRET_KEY
         generateValue: true
       - key: DEBUG
