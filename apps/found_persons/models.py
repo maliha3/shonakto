@@ -98,3 +98,58 @@ class FoundPerson(models.Model):
     @property
     def uploader_badge(self):
         return self.uploaded_by.authority_badge
+
+
+class LostPersonStatus(models.TextChoices):
+    MISSING = "missing", "Missing"
+    FOUND = "found", "Found"
+
+
+def lost_photo_upload_path(instance, filename):
+    ext = filename.split(".")[-1]
+    return f"lost_persons/{instance.id}.{ext}"
+
+
+class LostPerson(models.Model):
+    """
+    A missing-person report uploaded by a family member/friend — the public
+    counterpart to FoundPerson, browsable in its own feed so people can
+    recognize someone from a photo without running an AI face-match search.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reported_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="lost_person_reports"
+    )
+
+    photo = models.ImageField(upload_to=lost_photo_upload_path)
+    full_name = models.CharField(max_length=255)
+
+    last_seen_location = models.CharField(max_length=255, help_text="Free-text location description")
+    division = models.CharField(max_length=20, choices=Division.choices)
+
+    last_seen_timestamp = models.DateTimeField(help_text="When the person was last seen")
+    description = models.TextField(blank=True, help_text="Additional notes: clothing, health condition, etc.")
+
+    estimated_age = models.PositiveIntegerField(null=True, blank=True)
+    gender = models.CharField(max_length=10, choices=Gender.choices, default=Gender.UNKNOWN)
+    distinguishing_marks = ArrayField(
+        models.CharField(max_length=20, choices=DistinguishingMark.choices),
+        default=list,
+        blank=True,
+    )
+    status = models.CharField(max_length=10, choices=LostPersonStatus.choices, default=LostPersonStatus.MISSING)
+
+    is_active = models.BooleanField(default=True, help_text="Set False once reunited or withdrawn")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "lost_persons"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.full_name} last seen in {self.division} ({self.created_at:%Y-%m-%d})"
+
+    @property
+    def reporter_badge(self):
+        return self.reported_by.authority_badge

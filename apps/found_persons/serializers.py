@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import FoundPerson
+from .models import FoundPerson, LostPerson
 
 
 class FoundPersonUploadSerializer(serializers.ModelSerializer):
@@ -57,5 +57,55 @@ class FoundPersonSerializer(serializers.ModelSerializer):
             "is_active",
             "created_at",
             "expires_at",
+        ]
+        read_only_fields = fields
+
+
+class LostPersonUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LostPerson
+        fields = [
+            "id",
+            "photo",
+            "full_name",
+            "last_seen_location",
+            "division",
+            "last_seen_timestamp",
+            "description",
+            "estimated_age",
+            "gender",
+            "distinguishing_marks",
+        ]
+        read_only_fields = ["id"]
+
+    def create(self, validated_data):
+        validated_data["reported_by"] = self.context["request"].user
+        return super().create(validated_data)
+
+
+class LostPersonSerializer(serializers.ModelSerializer):
+    reported_by = serializers.UUIDField(source="reported_by_id", read_only=True)
+    reporter_name = serializers.CharField(source="reported_by.name", read_only=True)
+    reporter_badge = serializers.ReadOnlyField()
+
+    class Meta:
+        model = LostPerson
+        fields = [
+            "id",
+            "photo",
+            "full_name",
+            "last_seen_location",
+            "division",
+            "last_seen_timestamp",
+            "description",
+            "estimated_age",
+            "gender",
+            "distinguishing_marks",
+            "status",
+            "reported_by",
+            "reporter_name",
+            "reporter_badge",
+            "is_active",
+            "created_at",
         ]
         read_only_fields = fields
