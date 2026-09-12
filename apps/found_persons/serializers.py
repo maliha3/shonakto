@@ -80,7 +80,14 @@ class LostPersonUploadSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data["reported_by"] = self.context["request"].user
-        return super().create(validated_data)
+        instance = super().create(validated_data)
+
+        # Generate + store the facial embedding right after upload so a
+        # "Search Missing Person" query can be matched against it too.
+        from .tasks import generate_embedding_for_lost_person
+
+        generate_embedding_for_lost_person.delay(str(instance.id))
+        return instance
 
 
 class LostPersonSerializer(serializers.ModelSerializer):

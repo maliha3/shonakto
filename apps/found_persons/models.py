@@ -140,6 +140,11 @@ class LostPerson(models.Model):
     )
     status = models.CharField(max_length=10, choices=LostPersonStatus.choices, default=LostPersonStatus.MISSING)
 
+    # Facial embedding used for AI matching — same scheme as FoundPerson.face_embedding,
+    # so a "Search Missing Person" query can be compared against both.
+    face_embedding = models.JSONField(null=True, blank=True)
+    embedding_generated_at = models.DateTimeField(null=True, blank=True)
+
     is_active = models.BooleanField(default=True, help_text="Set False once reunited or withdrawn")
     created_at = models.DateTimeField(auto_now_add=True)
 

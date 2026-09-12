@@ -31,6 +31,30 @@ def generate_embedding_for_found_person(found_person_id):
 
 
 @shared_task
+def generate_embedding_for_lost_person(lost_person_id):
+    """Runs the AI face-embedding pipeline on a newly uploaded lost-person photo."""
+    from apps.search.face_utils import generate_face_embedding
+
+    from .models import LostPerson
+
+    try:
+        lost_person = LostPerson.objects.get(id=lost_person_id)
+    except LostPerson.DoesNotExist:
+        logger.warning("LostPerson %s no longer exists; skipping embedding.", lost_person_id)
+        return
+
+    embedding = generate_face_embedding(lost_person.photo)
+    if embedding is None:
+        logger.warning("No face detected in lost_person=%s; leaving embedding empty.", lost_person_id)
+        return
+
+    lost_person.face_embedding = embedding
+    lost_person.embedding_generated_at = timezone.now()
+    lost_person.save(update_fields=["face_embedding", "embedding_generated_at"])
+    logger.info("Embedding generated for lost_person=%s", lost_person_id)
+
+
+@shared_task
 def purge_expired_found_records():
     """
     Data Retention Rule: delete found records (and their images) older than

@@ -39,12 +39,28 @@ class ReviewStatus(models.TextChoices):
 
 
 class MatchResult(models.Model):
-    """A single face-match hit for a SearchQuery, cached after the AI pipeline runs."""
+    """
+    A single face-match hit for a SearchQuery, cached after the AI pipeline
+    runs. The query photo is compared against both the found-person and the
+    lost-person databases, so exactly one of found_person/lost_person is set
+    per row — never both, never neither.
+    """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     search_query = models.ForeignKey(SearchQuery, on_delete=models.CASCADE, related_name="matches")
     found_person = models.ForeignKey(
-        "found_persons.FoundPerson", on_delete=models.CASCADE, related_name="match_results"
+        "found_persons.FoundPerson",
+        on_delete=models.CASCADE,
+        related_name="match_results",
+        null=True,
+        blank=True,
+    )
+    lost_person = models.ForeignKey(
+        "found_persons.LostPerson",
+        on_delete=models.CASCADE,
+        related_name="match_results",
+        null=True,
+        blank=True,
     )
     match_percentage = models.FloatField()
     created_at = models.DateTimeField(auto_now_add=True)
@@ -58,10 +74,23 @@ class MatchResult(models.Model):
     class Meta:
         db_table = "match_results"
         ordering = ["-match_percentage"]
-        unique_together = ("search_query", "found_person")
+        unique_together = (("search_query", "found_person"), ("search_query", "lost_person"))
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    models.Q(found_person__isnull=False, lost_person__isnull=True)
+                    | models.Q(found_person__isnull=True, lost_person__isnull=False)
+                ),
+                name="match_result_exactly_one_target",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.match_percentage:.2f}% match for query {self.search_query_id}"
+
+    @property
+    def matched_person(self):
+        return self.found_person or self.lost_person
 
 
 class MatchNotification(models.Model):

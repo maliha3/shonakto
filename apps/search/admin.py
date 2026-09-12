@@ -11,7 +11,7 @@ class SearchQueryAdmin(admin.ModelAdmin):
 
 @admin.register(MatchResult)
 class MatchResultAdmin(admin.ModelAdmin):
-    list_display = ["id", "search_query", "found_person", "match_percentage", "status", "reviewed_by"]
+    list_display = ["id", "search_query", "found_person", "lost_person", "match_percentage", "status", "reviewed_by"]
     list_filter = ["status"]
 
 

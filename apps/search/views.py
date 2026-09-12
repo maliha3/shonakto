@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.permissions import IsLawEnforcement
-from apps.found_persons.models import CaseStatus, FoundPerson
+from apps.found_persons.models import CaseStatus, FoundPerson, LostPersonStatus
 
 from .models import MatchNotification, MatchResult, ReviewStatus, SearchQuery
 from .serializers import (
@@ -50,7 +50,9 @@ class SearchQueryResultView(APIView):
 
     def get(self, request, pk):
         query = get_object_or_404(
-            SearchQuery.objects.prefetch_related("matches__found_person__uploaded_by"),
+            SearchQuery.objects.prefetch_related(
+                "matches__found_person__uploaded_by", "matches__lost_person__reported_by"
+            ),
             pk=pk,
             requested_by=request.user,
         )
@@ -92,7 +94,13 @@ class PendingMatchesView(APIView):
     def get(self, request):
         matches = (
             MatchResult.objects.filter(status=ReviewStatus.PENDING)
-            .select_related("search_query", "found_person", "found_person__uploaded_by")
+            .select_related(
+                "search_query",
+                "found_person",
+                "found_person__uploaded_by",
+                "lost_person",
+                "lost_person__reported_by",
+            )
             .order_by("-match_percentage")
         )
         return Response(MatchResultSerializer(matches, many=True).data)
@@ -101,8 +109,9 @@ class PendingMatchesView(APIView):
 class MatchReviewView(APIView):
     """
     PATCH /api/search/matches/{id}/review/
-    Body: {"action": "approve" | "reject"}. Approving a match also marks the
-    matched FoundPerson record as reunited.
+    Body: {"action": "approve" | "reject"}. Approving a match marks the
+    matched record as resolved — a FoundPerson as reunited, or a LostPerson
+    as found.
     """
 
     permission_classes = [IsLawEnforcement]
@@ -119,8 +128,12 @@ class MatchReviewView(APIView):
         match.save(update_fields=["status", "reviewed_by", "reviewed_at"])
 
         if action == "approve":
-            match.found_person.status = CaseStatus.REUNITED
-            match.found_person.save(update_fields=["status"])
+            if match.found_person_id:
+                match.found_person.status = CaseStatus.REUNITED
+                match.found_person.save(update_fields=["status"])
+            elif match.lost_person_id:
+                match.lost_person.status = LostPersonStatus.FOUND
+                match.lost_person.save(update_fields=["status"])
 
         return Response(MatchResultSerializer(match).data)
 
@@ -128,7 +141,8 @@ class MatchReviewView(APIView):
 class NotifyUploaderView(APIView):
     """
     POST /api/search/matches/{id}/notify-uploader/
-    Lets the searcher who owns this match alert the found-person's uploader,
+    Lets the searcher who owns this match alert whoever reported the matched
+    record — the found-person's uploader, or the lost-person's reporter —
     with the searcher's contact details attached. Only the searcher who ran
     the query this match belongs to can trigger it, and only once per match.
     """
@@ -137,13 +151,17 @@ class NotifyUploaderView(APIView):
 
     def post(self, request, pk):
         match = get_object_or_404(
-            MatchResult.objects.select_related("search_query", "found_person__uploaded_by"), pk=pk
+            MatchResult.objects.select_related(
+                "search_query", "found_person__uploaded_by", "lost_person__reported_by"
+            ),
+            pk=pk,
         )
         if match.search_query.requested_by_id != request.user.id:
             return Response({"detail": "Not your search result."}, status=403)
 
+        recipient = match.found_person.uploaded_by if match.found_person_id else match.lost_person.reported_by
         notification, created = MatchNotification.objects.get_or_create(
-            match_result=match, defaults={"recipient": match.found_person.uploaded_by}
+            match_result=match, defaults={"recipient": recipient}
         )
         return Response(
             {"created": created, "notification": MatchNotificationSerializer(notification).data},
@@ -158,7 +176,9 @@ class MyNotificationsView(APIView):
 
     def get(self, request):
         notifications = MatchNotification.objects.filter(recipient=request.user).select_related(
-            "match_result__search_query__requested_by", "match_result__found_person"
+            "match_result__search_query__requested_by",
+            "match_result__found_person",
+            "match_result__lost_person",
         )
         return Response(MatchNotificationSerializer(notifications, many=True).data)
 
