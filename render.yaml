@@ -1,0 +1,58 @@
+services:
+  - type: web
+    name: shonakto-backend
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
+    startCommand: "gunicorn config.wsgi:application"
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      # Supabase Postgres connection info — from your Supabase project's
+      # Settings > Database page.
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      # Supabase Storage (photo uploads)
+      - key: USE_SUPABASE_STORAGE
+        value: "True"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: "found-person-photos"
+      # Mailjet SMTP relay (OTP emails)
+      - key: EMAIL_BACKEND
+        value: "django.core.mail.backends.smtp.EmailBackend"
+      - key: EMAIL_HOST
+        value: "in-v3.mailjet.com"
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      # No Redis/Celery worker on the free tier — run tasks inline instead.
+      - key: CELERY_TASK_ALWAYS_EAGER
+        value: "True"
+      - key: FACE_MATCH_THRESHOLD
+        value: "50.0"
+      - key: FOUND_RECORD_RETENTION_DAYS
+        value: "30"
+      # The deployed Flutter web app's URL, once you have it (Vercel).
+      - key: FRONTEND_URL
+        sync: false
